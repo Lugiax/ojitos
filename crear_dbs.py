@@ -170,14 +170,14 @@ for n, k in enumerate(dict_archivos):#enumerate(list(dict_archivos.keys())[:10])
                         for l in rot_labels]
         
         mascara_completa = (new_labels[0] + new_labels[1])/2. >= mask_thresh
-        print(np.mean(mascara_completa))
-        _, ax = plt.subplots(1,2)
-        ax[0].imshow((new_labels[0] + new_labels[1])/2)
-        ax[1].imshow(mascara_completa)
-        plt.show()
+        #print(np.mean(mascara_completa))
+        #_, ax = plt.subplots(1,2)
+        #ax[0].imshow((new_labels[0] + new_labels[1])/2)
+        #ax[1].imshow(mascara_completa)
+        #plt.show()
         #Si no hay al menos el 10% de vasos en la image, salta al siguiente
-        if np.mean(mascara_completa) < 0.1:
-            continue
+        #if np.mean(mascara_completa) < 0.1:
+        #    continue
         
         rot_img = rotate(img[cy-sub_pad:cy+sub_pad,cx-sub_pad:cx+sub_pad], angle)
         
