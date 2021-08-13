@@ -17,9 +17,9 @@ parser.add_argument('data_dir', type=str,
 parser.add_argument('--save_dir', type=str,
                     help='Directorio donde se guardarán todos los archivos generados',
                     default='dbs')
-parser.add_argument('--nombre', type=str,
-                    help='Nombre del archivo',
-                    default='data.npy')
+#parser.add_argument('--nombre', type=str,
+#                    help='Nombre del archivo',
+#                    default='data.npy')
 parser.add_argument('--n_aumentados', type=int,
                     help='Cantidad de generados por imagen',
                     default=500)
@@ -53,8 +53,6 @@ save_path  = args.save_dir
 assert os.path.isdir(source), 'No existe el directorio de datos'
 if not os.path.isdir(save_path):
     os.makedirs(save_path)
-nombre = args.nombre if '.npy' in args.nombre else args.nombre+'.npy'
-save_fn = os.path.join(save_path, nombre)
 
 
 lista_archivos = glob(source + '/*')
@@ -73,6 +71,9 @@ desplazamiento = args.desp_max
 automata_shape = eval(args.automata_shape)
 assert len(automata_shape)==2
 
+##Se le da forma al nombre
+nombre = f'datos_{tipo}_{N_aumentos_x_img}aug_{ventana}ven_{automata_shape[0]}aut_{max_angle}deg_{desplazamiento}des.npy'
+save_fn = os.path.join(save_path, nombre)
 
 ## ------------------ FUNCS
 def adjust(img):
