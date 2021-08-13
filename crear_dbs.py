@@ -64,6 +64,7 @@ N_aumentos_x_img = args.n_aumentados
 max_angle = args.angulo_max
 tipo = args.tipo
 assert tipo in ['disco', 'ventanas']
+mask_thresh = 0.15
 ventana = args.tamano_vent
 padding = args.padding #Si es None, se considera una padding igual a ventana//3
                #El padding evita partes negras en las imágenes de los datos
@@ -108,8 +109,8 @@ def abrir_img(path, shape=None):
 # -------------------------LOOP
 if args.mostrar: 
     fig, axs = plt.subplots(1,3)
-    plt.ion()
-    plt.show()
+    #plt.ion()
+    #plt.show()
 x = []
 y = []
 padding = ventana//3 if padding is None else padding
@@ -167,8 +168,13 @@ for n, k in enumerate(dict_archivos):#enumerate(list(dict_archivos.keys())[:10])
                                     automata_shape,
                                     anti_aliasing=True)\
                         for l in rot_labels]
-        mascara_completa = (new_labels[0] + new_labels[1])/2. >= 0.45
         
+        mascara_completa = (new_labels[0] + new_labels[1])/2. >= mask_thresh
+        print(np.mean(mascara_completa))
+        _, ax = plt.subplots(1,2)
+        ax[0].imshow((new_labels[0] + new_labels[1])/2)
+        ax[1].imshow(mascara_completa)
+        plt.show()
         #Si no hay al menos el 10% de vasos en la image, salta al siguiente
         if np.mean(mascara_completa) < 0.1:
             continue
