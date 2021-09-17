@@ -113,7 +113,7 @@ if args.mostrar:
     #plt.show()
 x = []
 y = []
-padding = ventana//3 if padding is None else padding
+padding = ventana if padding is None else padding
 sub_pad = ventana//2+padding
 for n, k in enumerate(dict_archivos):#enumerate(list(dict_archivos.keys())[:10]):#
     print(f'Abriendo imagen {n+1} ({k})')
@@ -137,7 +137,7 @@ for n, k in enumerate(dict_archivos):#enumerate(list(dict_archivos.keys())[:10])
         print(f'encontrado en {cy} y - {cx} x')
         desps = np.random.randint(-desplazamiento, desplazamiento, size=(N_aumentos_x_img, 2))
         coords = [(cy+dy, cx+dx) for dy,dx in desps]
-        img[cy-10:cy+11, cx-10:cx+11] = np.ones((21,21,3))
+        #img[cy-10:cy+11, cx-10:cx+11] = np.ones((21,21,3))
     else:
         #Se buscan las coordenadas donde hay vasos sanguíneos
         print(f'\t- Buscando las coordenadas válidas para cada vaso de búsqueda...')
