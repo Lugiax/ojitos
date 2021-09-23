@@ -3,9 +3,10 @@ import tensorflow as tf
 import numpy as np
 import os
 
-from skimage.morphology import selem
+from scipy.io import savemat
+from time import time
 from automata import CAModel 
-from utils import cargar_dataset, export_model, save_plot_loss, save_batch_vis
+from utils import cargar_dataset, export_model, save_plot_loss, save_batch_vis, imwrite, color_labels
 
 parser = argparse.ArgumentParser()
 parser.add_argument('db_name', type=str,
@@ -30,6 +31,9 @@ parser.add_argument('--selem_size', type=int,
 parser.add_argument('--n_epochs', type=int,
                     help='Número de épocas de entrenamiento',
                     default=10000)
+parser.add_argument('--n_eval_imgs', type=int,
+                    help='Número de imágenes de evaluación de los conjuntos de entrenamiento y prueba',
+                    default=None)
 parser.add_argument('--save_dir', type=str,
                     help='Directorio donde se guardarán todos los archivos generados',
                     default='resultados')
@@ -46,6 +50,8 @@ if not os.path.isdir(args.save_dir):
     os.makedirs(args.save_dir)
     os.mkdir(os.path.join(args.save_dir, 'figures'))
     os.mkdir(os.path.join(args.save_dir, 'model'))
+    os.makedirs(os.path.join(args.save_dir, 'ResultadosEval/entrenamiento'))
+    os.makedirs(os.path.join(args.save_dir, 'ResultadosEval/prueba'))
 
 x_train, y_train_pic, x_test, y_test_pic = cargar_dataset(nombre=args.db_name,
                                                           carpeta=args.db_dir,
@@ -110,3 +116,51 @@ for i in range(args.n_epochs):
 export_model(ca,
              os.path.join(args.save_dir, 'model/last'),
              args)
+
+
+
+print(f'Modelo entrenado y guardado en {os.path.join(args.save_dir, "model/last")}'
+       '\nSe procede a realizar la evaluación')
+
+#Evaluación del modelo
+n_imgs_test = x_train.shape[0] if args.n_eval_imgs is None else args.n_eval_imgs
+for save_path, x, y, tipo in [[os.path.join(args.save_dir, 'ResultadosEval/entrenamiento'),
+                         np.array(x_train)[:n_imgs_test],
+                         np.array(y_train_pic)[:n_imgs_test],
+                         'entrenamiento'],
+                        [os.path.join(args.save_dir, 'ResultadosEval/prueba'),
+                         np.array(x_test)[:n_imgs_test],
+                         np.array(y_test_pic)[:n_imgs_test],
+                         'prueba']]:
+    print(f'\tEvaluando conjunto de {tipo}')
+    t1 = time()
+    x0 = ca.initialize(x)
+    for _ in range(20):
+        x0 = ca(x0)
+    t2= time()
+    print(f'\t  Tiempo procesado de {t2-t1} segundos')
+
+
+    true_labels = color_labels(x, y)
+    pred_labels = color_labels(x, x0[..., -2:])
+
+    matrices = {}
+    for j in range(x.shape[0]):
+        art_d, ven_d = y[j, ..., 0], y[j, ..., 1]
+        art_p, ven_p = x0[j, ..., 0], x0[j, ..., 1]
+        imwrite(os.path.join(save_path, f'gt_art_{j}.png'), y[j, ..., 0])
+        imwrite(os.path.join(save_path, f'gt_ven_{j}.png'), y[j, ..., 1])
+        imwrite(os.path.join(save_path, f'gtcolor_{j}.png'), true_labels[j])
+        imwrite(os.path.join(save_path, f'pd_art_{j}.png'), x0[j, ..., -2])
+        imwrite(os.path.join(save_path, f'pd_ven_{j}.png'), x0[j, ..., -1])
+        imwrite(os.path.join(save_path, f'pdcolor_{j}.png'), pred_labels[j])
+
+        savemat(os.path.join(save_path, f'matrices_{j}.m'),
+                {'gt_art' : y[j, ..., 0],
+                'gt_ven' : y[j, ..., 1],
+                'gtcolor': true_labels[j],
+                'pd_art' : x0[j, ..., -2],
+                'pd_ven' : x0[j, ..., -1],
+                'pdcolor': pred_labels[j]}
+                )
+print(f'Resultados guardados en {os.path.join(args.save_dir, "ResultadosEval/")}')

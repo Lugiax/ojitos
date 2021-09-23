@@ -176,7 +176,8 @@ elif 'hrf' in source.lower():
 else:
     raise ValueError('Carpeta incorrecta')
 
-for rgb_path, labels_path in zip(lista_rgb, lista_labels): 
+for rgb_path, labels_path in zip(lista_rgb, lista_labels):
+    print(f'Trabajando con la imagen {os.path.basename(rgb_path).split(".")[0]}') 
     ##Image lecture
     rgb_img = abrir_img(rgb_path)/255.
     if 'iimas' in source.lower():
@@ -213,12 +214,12 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
     #plt.imshow(img)
     #plt.plot([cx], [cy], 'g*')
     #plt.show()
-    print('\t- Generando datos... Encontrados:', end='')
+    print('\t- Generando datos...', end='')
     counter = 0
     selected = 0
     while counter <N_aumentos_x_img and selected < len(coords) :
         if counter% int(N_aumentos_x_img*0.1)==0:
-            print(f'{counter}', end='-')
+            print(f'\r\t- Generando datos... Encontrados: {counter}', end='')
         #try:
         cy, cx = coords[selected]
         selected += 1
@@ -262,7 +263,7 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
         counter+=1
         #except:
         #    pass
-    print(f'... {counter} datos generados... Continuando...')
+    print(f'\r\t- Generando datos... {counter} datos generados... Continuando...')
 
 print(f'Terminado :D ... generados {len(x)} datos')        
 print('Partiendo los datos')        
