@@ -25,7 +25,7 @@ parser.add_argument('--n_aumentados', type=int,
                     default=500)
 parser.add_argument('--tipo', type=str,
                     help='Basado en: disco óptico o ventanas. Seleccionar de entre: [disco, ventanas]',
-                    default='ventanas')
+                    default='disco')
 parser.add_argument('--angulo_max', type=int,
                     help='Máximo ángulo de rotación de los nuevos datos, debe ser mayor a 1deg',
                     default=1)
@@ -33,8 +33,8 @@ parser.add_argument('--desp_max', type=int,
                     help='Máximo desplazamiento del centro de la imagen',
                     default=1)
 parser.add_argument('--tamano_vent', type=int,
-                    help='Tamaño en px de las ventanas. Recomendado 1500 para disco y 300 para ventanas',
-                    default=300)
+                    help='Tamaño en px de las ventanas. Recomendado 800 para disco y 300 para ventanas',
+                    default=800)
 parser.add_argument('--padding', type=int,
                     help='Padding para las zonas negras en la rotación',
                     default=None)
@@ -54,10 +54,6 @@ assert os.path.isdir(source), 'No existe el directorio de datos'
 if not os.path.isdir(save_path):
     os.makedirs(save_path)
 
-
-lista_archivos = glob(source + '/*')
-nombres_unicos = {re.findall(r'(\d+_\d+)', a)[0] for a in lista_archivos}
-dict_archivos = {u: [a for a in lista_archivos if os.path.basename(a).startswith(u)] for u in nombres_unicos}
 
 # Parámetros:
 N_aumentos_x_img = args.n_aumentados
@@ -115,22 +111,56 @@ x = []
 y = []
 padding = ventana if padding is None else padding
 sub_pad = ventana//2+padding
-for n, k in enumerate(dict_archivos):#enumerate(list(dict_archivos.keys())[:10]):#
-    print(f'Abriendo imagen {n+1} ({k})')
-    labels = []
-    for i in dict_archivos[k]:
-        if 'artery' in i: #Máscara de arterias
-            b = abrir_img(i)*1.#tf.cast(abrir_img(i, img_shape)*1, tf.float32)
-            b= np.pad(b,((padding,padding),(padding,padding)), mode='constant', constant_values=0)
-            labels.insert(0, b)
-        elif 'vein' in i: #Máscara de venas
-            b = abrir_img(i)*1.#tf.cast(abrir_img(i, img_shape)*1, tf.float32)
-            b= np.pad(b,((padding,padding),(padding,padding)), mode='constant', constant_values=0)
-            labels.append(b)
-        else:
-            img = abrir_img(i)/255.
-            img = np.pad(img,((padding,padding),(padding,padding), (0,0)), mode='constant', constant_values=0)
-    
+
+lista_rgb = []
+lista_labels = []
+
+## Procesamiento para la base de datos del IIMAS
+if 'iimas' in source.lower():
+    lista_archivos = glob(source + '/*')
+    nombres_unicos = {re.findall(r'(\d+_\d+)', a)[0] for a in lista_archivos}
+    dict_archivos = {u: [a for a in lista_archivos if os.path.basename(a).startswith(u)] for u in nombres_unicos}
+    for n, k in enumerate(dict_archivos):#enumerate(list(dict_archivos.keys())[:10]):#
+        print(f'Abriendo imagen {n+1} ({k})')
+        labels = []
+        for i in dict_archivos[k]:
+            if 'artery' in i: #Máscara de arterias
+                b = abrir_img(i)*1.#tf.cast(abrir_img(i, img_shape)*1, tf.float32)
+                b= np.pad(b, padding, mode='constant', constant_values=0)
+                labels.insert(0, b)
+            elif 'vein' in i: #Máscara de venas
+                b = abrir_img(i)*1.#tf.cast(abrir_img(i, img_shape)*1, tf.float32)
+                b= np.pad(b, padding, mode='constant', constant_values=0)
+                labels.append(b)
+            else:
+                img = abrir_img(i)/255.
+                img = np.pad(img,((padding,padding),(padding,padding), (0,0)), mode='constant', constant_values=0)
+        lista_labels.append(labels)
+        lista_rgb.append(img)
+        
+##Procesamiento de datos de HRF-AV
+##Dentro de esta carpeta tenemos tres más, sólo se usan dos de ellas.
+elif 'hrf' in source.lower():
+    lista_rgb = sorted(glob(source + '/Images/*'))
+    lista_cls = sorted(glob(source + '/AVReference/*'))
+    print('Abriendo imgs')
+    rgb_imgs = [
+                np.pad(abrir_img(i)/255.,
+                        ((padding,padding),(padding,padding), (0,0)))
+                for i in lista_rgb
+                ]
+    cls_imgs = [np.pad(abrir_img(i)*1., padding) for i in lista_cls]
+    print('Abriendo clasifs')
+    lista_labels = [
+                    (np.clip(cls_img[..., 0] + cls_img[..., 1], 0, 1), #R + G
+                    np.clip(cls_img[..., 2] + cls_img[..., 1], 0, 1)) #B + G
+                    for cls_img in cls_imgs
+                ]
+else:
+    raise ValueError('Carpeta incorrecta')
+
+for rgb_img, labels in zip(lista_rgb, lista_labels): 
+
     if tipo=='disco':
         print('\tTrabajando con el disco óptico... ', end='')
         cy, cx = get_optical_disk_center(img, scale=0.3)
