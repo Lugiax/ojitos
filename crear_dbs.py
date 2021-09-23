@@ -4,11 +4,13 @@ import PIL.Image
 import re
 import numpy as np
 import matplotlib.pyplot as plt
+import pdb
 
 from glob import glob
 from skimage.transform import resize, rotate
 from skimage.morphology import skeletonize, disk, binary_dilation
 from skimage.measure import regionprops
+from skimage.io import imread
 
 
 parser = argparse.ArgumentParser()
@@ -96,10 +98,13 @@ def get_optical_disk_center(im, t=0.92, scale=0.3):
 
 
 def abrir_img(path, shape=None):
-    img = PIL.Image.open(path)
+    if path.split('.')[-1] in ['tif', 'tiff']:
+        img = np.array(PIL.Image.open(path))
+    else:
+        img = imread(path)
     if shape is not None:
-        img = img.resize(shape)
-    return np.array(img)
+        img = resize(img, shape)
+    return img
 
 
 # -------------------------LOOP
@@ -121,53 +126,81 @@ if 'iimas' in source.lower():
     nombres_unicos = {re.findall(r'(\d+_\d+)', a)[0] for a in lista_archivos}
     dict_archivos = {u: [a for a in lista_archivos if os.path.basename(a).startswith(u)] for u in nombres_unicos}
     for n, k in enumerate(dict_archivos):#enumerate(list(dict_archivos.keys())[:10]):#
-        print(f'Abriendo imagen {n+1} ({k})')
+        print(f'Guardando rutas de las imágenes --Abriendo-imagen-- {n+1} ({k})')
         labels = []
         for i in dict_archivos[k]:
             if 'artery' in i: #Máscara de arterias
-                b = abrir_img(i)*1.#tf.cast(abrir_img(i, img_shape)*1, tf.float32)
-                b= np.pad(b, padding, mode='constant', constant_values=0)
-                labels.insert(0, b)
+                #b = abrir_img(i)*1.#tf.cast(abrir_img(i, img_shape)*1, tf.float32)
+                #print(f'Imagen {i} de forma {b.shape} tiene un tamaño de {b.size}*{b.itemsize}={b.size*b.itemsize/8e6}')
+                #b= np.pad(b, padding, mode='constant', constant_values=0)
+                labels.insert(0, i)
             elif 'vein' in i: #Máscara de venas
-                b = abrir_img(i)*1.#tf.cast(abrir_img(i, img_shape)*1, tf.float32)
-                b= np.pad(b, padding, mode='constant', constant_values=0)
-                labels.append(b)
+                #b = abrir_img(i)*1.#tf.cast(abrir_img(i, img_shape)*1, tf.float32)
+                #print(f'Imagen {i} de forma {b.shape} tiene un tamaño de {b.size}*{b.itemsize}={b.size*b.itemsize/8e6}')
+                #b= np.pad(b, padding, mode='constant', constant_values=0)
+                labels.append(i)
             else:
-                img = abrir_img(i)/255.
-                img = np.pad(img,((padding,padding),(padding,padding), (0,0)), mode='constant', constant_values=0)
+                #img = abrir_img(i)/255.
+                #print(f'Imagen {i} de forma {img.shape} tiene un tamaño de {img.size}*{img.itemsize}={img.size*img.itemsize/8e6}')
+                #img = np.pad(img,((padding,padding),(padding,padding), (0,0)), mode='constant', constant_values=0)
+                lista_rgb.append(i)
         lista_labels.append(labels)
-        lista_rgb.append(img)
+        
         
 ##Procesamiento de datos de HRF-AV
 ##Dentro de esta carpeta tenemos tres más, sólo se usan dos de ellas.
 elif 'hrf' in source.lower():
     lista_rgb = sorted(glob(source + '/Images/*'))
-    lista_cls = sorted(glob(source + '/AVReference/*'))
+    lista_labels = sorted(glob(source + '/AVReference/*'))
+    """
     print('Abriendo imgs')
-    rgb_imgs = [
-                np.pad(abrir_img(i)/255.,
-                        ((padding,padding),(padding,padding), (0,0)))
-                for i in lista_rgb
-                ]
-    cls_imgs = [np.pad(abrir_img(i)*1., padding) for i in lista_cls]
-    print('Abriendo clasifs')
+    total_Mb = 0
+    lista_rgb = []
+    for i, p in enumerate(lista_imgs):
+        img = abrir_img(p)/255.
+        print(f'Imagen {i}-{os.path.basename(p)} de forma {img.shape} tiene un tamaño de {img.size}*{img.itemsize}={img.size*img.itemsize/8e6}')
+        total_Mb += img.size*img.itemsize/1e6
+    cls_imgs = []
+    for i, p in enumerate(lista_cls):
+        img = abrir_img(p)/255.
+        print(f'Imagen {i}-{os.path.basename(p)} de forma {img.shape} tiene un tamaño de {img.size}*{img.itemsize}={img.size*img.itemsize/8e6}')
+        total_Mb += img.size*img.itemsize/8e6
+    print(f'Un total de {total_Mb}Mb')
+    pdb.set_trace()
     lista_labels = [
                     (np.clip(cls_img[..., 0] + cls_img[..., 1], 0, 1), #R + G
                     np.clip(cls_img[..., 2] + cls_img[..., 1], 0, 1)) #B + G
                     for cls_img in cls_imgs
                 ]
+    """
 else:
     raise ValueError('Carpeta incorrecta')
 
-for rgb_img, labels in zip(lista_rgb, lista_labels): 
+for rgb_path, labels_path in zip(lista_rgb, lista_labels): 
+    ##Image lecture
+    rgb_img = abrir_img(rgb_path)/255.
+    if 'iimas' in source.lower():
+        labels = [
+            abrir_img[labels_path[0]]*1.,
+            abrir_img[labels_path[1]]*1.
+        ]
+    elif 'hrf' in source.lower():
+        label_img = abrir_img(labels_path)
+        labels = [
+                np.clip(label_img[..., 0] + label_img[..., 1], 0, 1), #R + G
+                np.clip(label_img[..., 2] + label_img[..., 1], 0, 1) #B + G
+                ]
 
+    ##Image padding
+    rgb_img = np.pad( rgb_img, ((padding,padding),(padding,padding), (0,0)) )
+    labels = [np.pad(l, padding) for l in labels]
+    
     if tipo=='disco':
         print('\tTrabajando con el disco óptico... ', end='')
-        cy, cx = get_optical_disk_center(img, scale=0.3)
+        cy, cx = get_optical_disk_center(rgb_img, scale=0.3)
         print(f'encontrado en {cy} y - {cx} x')
         desps = np.random.randint(-desplazamiento, desplazamiento, size=(N_aumentos_x_img, 2))
         coords = [(cy+dy, cx+dx) for dy,dx in desps]
-        #img[cy-10:cy+11, cx-10:cx+11] = np.ones((21,21,3))
     else:
         #Se buscan las coordenadas donde hay vasos sanguíneos
         print(f'\t- Buscando las coordenadas válidas para cada vaso de búsqueda...')
@@ -209,7 +242,7 @@ for rgb_img, labels in zip(lista_rgb, lista_labels):
         #if np.mean(mascara_completa) < 0.1:
         #    continue
         
-        rot_img = rotate(img[cy-sub_pad:cy+sub_pad,cx-sub_pad:cx+sub_pad], angle)
+        rot_img = rotate(rgb_img[cy-sub_pad:cy+sub_pad,cx-sub_pad:cx+sub_pad], angle)
         
         new_img = resize(rot_img[padding:-padding, padding:-padding],
                             automata_shape,
