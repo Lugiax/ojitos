@@ -2,6 +2,7 @@ import argparse
 import tensorflow as tf
 import numpy as np
 import os
+import matplotlib.pyplot as plt
 
 from scipy.io import savemat
 from time import time
@@ -57,6 +58,13 @@ x_train, y_train_pic, x_test, y_test_pic = cargar_dataset(nombre=args.db_name,
                                                           carpeta=args.db_dir,
                                                           agregar_girard=args.agregar_girard,
                                                           selem_size=args.selem_size)
+fig, axs = plt.subplots(5, 3)
+color_labels_list = color_labels(x_train[:5], y_train_pic[:5])
+for k in range (5):
+    axs[k, 0].imshow(x_train[k, ..., :3])
+    axs[k, 1].imshow(x_train[k, ..., -1], cmap='gray')
+    axs[k, 2].imshow(color_labels_list[k])
+plt.show()
 
 
 ca = CAModel(model_name=args.model_name,
@@ -99,7 +107,7 @@ for i in range(args.n_epochs):
     step_i = len(loss_log)
     loss_log.append(loss.numpy())
 
-    if step_i%100 == 0:
+    if step_i%10 == 0:
         with open(os.path.join(args.save_dir, 'loss.txt'), 'w') as f:
             f.write(', '.join([str(i) for i in loss_log]))
         save_plot_loss(loss, args)

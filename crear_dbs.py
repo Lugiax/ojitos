@@ -62,7 +62,6 @@ N_aumentos_x_img = args.n_aumentados
 max_angle = args.angulo_max
 tipo = args.tipo
 assert tipo in ['disco', 'ventanas']
-mask_thresh = 0.15
 ventana = args.tamano_vent
 padding = args.padding #Si es None, se considera una padding igual a ventana//3
                #El padding evita partes negras en las imágenes de los datos
@@ -108,10 +107,6 @@ def abrir_img(path, shape=None):
 
 
 # -------------------------LOOP
-if args.mostrar: 
-    fig, axs = plt.subplots(1,3)
-    #plt.ion()
-    #plt.show()
 x = []
 y = []
 padding = ventana if padding is None else padding
@@ -126,23 +121,13 @@ if 'iimas' in source.lower():
     nombres_unicos = {re.findall(r'(\d+_\d+)', a)[0] for a in lista_archivos}
     dict_archivos = {u: [a for a in lista_archivos if os.path.basename(a).startswith(u)] for u in nombres_unicos}
     for n, k in enumerate(dict_archivos):#enumerate(list(dict_archivos.keys())[:10]):#
-        print(f'Guardando rutas de las imágenes --Abriendo-imagen-- {n+1} ({k})')
         labels = []
         for i in dict_archivos[k]:
             if 'artery' in i: #Máscara de arterias
-                #b = abrir_img(i)*1.#tf.cast(abrir_img(i, img_shape)*1, tf.float32)
-                #print(f'Imagen {i} de forma {b.shape} tiene un tamaño de {b.size}*{b.itemsize}={b.size*b.itemsize/8e6}')
-                #b= np.pad(b, padding, mode='constant', constant_values=0)
                 labels.insert(0, i)
             elif 'vein' in i: #Máscara de venas
-                #b = abrir_img(i)*1.#tf.cast(abrir_img(i, img_shape)*1, tf.float32)
-                #print(f'Imagen {i} de forma {b.shape} tiene un tamaño de {b.size}*{b.itemsize}={b.size*b.itemsize/8e6}')
-                #b= np.pad(b, padding, mode='constant', constant_values=0)
                 labels.append(i)
-            else:
-                #img = abrir_img(i)/255.
-                #print(f'Imagen {i} de forma {img.shape} tiene un tamaño de {img.size}*{img.itemsize}={img.size*img.itemsize/8e6}')
-                #img = np.pad(img,((padding,padding),(padding,padding), (0,0)), mode='constant', constant_values=0)
+            else: ## La imagen RGB
                 lista_rgb.append(i)
         lista_labels.append(labels)
         
@@ -152,41 +137,23 @@ if 'iimas' in source.lower():
 elif 'hrf' in source.lower():
     lista_rgb = sorted(glob(source + '/Images/*'))
     lista_labels = sorted(glob(source + '/AVReference/*'))
-    """
-    print('Abriendo imgs')
-    total_Mb = 0
-    lista_rgb = []
-    for i, p in enumerate(lista_imgs):
-        img = abrir_img(p)/255.
-        print(f'Imagen {i}-{os.path.basename(p)} de forma {img.shape} tiene un tamaño de {img.size}*{img.itemsize}={img.size*img.itemsize/8e6}')
-        total_Mb += img.size*img.itemsize/1e6
-    cls_imgs = []
-    for i, p in enumerate(lista_cls):
-        img = abrir_img(p)/255.
-        print(f'Imagen {i}-{os.path.basename(p)} de forma {img.shape} tiene un tamaño de {img.size}*{img.itemsize}={img.size*img.itemsize/8e6}')
-        total_Mb += img.size*img.itemsize/8e6
-    print(f'Un total de {total_Mb}Mb')
-    pdb.set_trace()
-    lista_labels = [
-                    (np.clip(cls_img[..., 0] + cls_img[..., 1], 0, 1), #R + G
-                    np.clip(cls_img[..., 2] + cls_img[..., 1], 0, 1)) #B + G
-                    for cls_img in cls_imgs
-                ]
-    """
 else:
     raise ValueError('Carpeta incorrecta')
 
+
+#Proceso de carga de imágenes y generación del dataset
 for rgb_path, labels_path in zip(lista_rgb, lista_labels):
     print(f'Trabajando con la imagen {os.path.basename(rgb_path).split(".")[0]}') 
     ##Image lecture
     rgb_img = abrir_img(rgb_path)/255.
     if 'iimas' in source.lower():
         labels = [
-            abrir_img[labels_path[0]]*1.,
-            abrir_img[labels_path[1]]*1.
+            abrir_img(labels_path[0])*1.,
+            abrir_img(labels_path[1])*1.
         ]
     elif 'hrf' in source.lower():
-        label_img = abrir_img(labels_path)
+        label_img = abrir_img(labels_path)/255.
+        print(f'Label inter {np.min(label_img)} - {np.max(label_img)}')
         labels = [
                 np.clip(label_img[..., 0] + label_img[..., 1], 0, 1), #R + G
                 np.clip(label_img[..., 2] + label_img[..., 1], 0, 1) #B + G
@@ -211,9 +178,7 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
         np.random.shuffle(coords)
         print(f'\t\t {len(coords)} coordenadas encontradas')
 
-    #plt.imshow(img)
-    #plt.plot([cx], [cy], 'g*')
-    #plt.show()
+
     print('\t- Generando datos...', end='')
     counter = 0
     selected = 0
@@ -227,42 +192,29 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
         angle = float(np.random.randint(-max_angle, max_angle))
         rot_labels = [rotate(l2, angle) for l2 in #
                         [l1[cy-sub_pad:cy+sub_pad,cx-sub_pad:cx+sub_pad] for l1 in labels]
-                        ]   
+                        ]
+                         
         new_labels = [resize(l[padding:-padding, padding:-padding],
                                     automata_shape,
                                     anti_aliasing=True)\
                         for l in rot_labels]
         
-        mascara_completa = (new_labels[0] + new_labels[1])/2. >= mask_thresh
-        #print(np.mean(mascara_completa))
-        #_, ax = plt.subplots(1,2)
-        #ax[0].imshow((new_labels[0] + new_labels[1])/2)
-        #ax[1].imshow(mascara_completa)
-        #plt.show()
-        #Si no hay al menos el 10% de vasos en la image, salta al siguiente
-        #if np.mean(mascara_completa) < 0.1:
-        #    continue
-        
+        mascara_completa = new_labels[0] + new_labels[1] > 0.1
         rot_img = rotate(rgb_img[cy-sub_pad:cy+sub_pad,cx-sub_pad:cx+sub_pad], angle)
-        
         new_img = resize(rot_img[padding:-padding, padding:-padding],
                             automata_shape,
                             anti_aliasing=True)
 
-
         if args.mostrar:
+            fig, axs = plt.subplots(1,2)
             axs[0].imshow(new_img)
             axs[1].imshow(mascara_completa)
-            axs[2].imshow(new_img*np.repeat(mascara_completa[..., np.newaxis], 3, axis=2))
-            plt.draw()
-            plt.pause(0.5)
+            plt.plot()
 
         x.append(np.concatenate( [new_img, mascara_completa[..., np.newaxis]], axis=2))
         y.append(np.stack(new_labels, axis=2))
 
         counter+=1
-        #except:
-        #    pass
     print(f'\r\t- Generando datos... {counter} datos generados... Continuando...')
 
 print(f'Terminado :D ... generados {len(x)} datos')        
