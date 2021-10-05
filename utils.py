@@ -54,8 +54,8 @@ def normalize_girard(batch, sigma=2, selem_size=5):
 
     return np.stack(new_batch) #tf.cast(tf.stack(new_batch), tf.float32)
 
-def cargar_dataset(nombre, carpeta='', agregar_girard=False, selem_size=5):
-    with open(os.path.join(carpeta, nombre), 'rb') as f:
+def cargar_dataset(fname, agregar_girard=False, selem_size=5):
+    with open(fname, 'rb') as f:
         x_train = np.load(f)
         y_train_pic =np.load(f)
         x_test = np.load(f)
@@ -172,13 +172,13 @@ def classify_and_color(ca, x, y0=None, disable_black=False):
             x[:,:,:,:4], ca.classify(x), disable_black, dtype=tf.float32)
         
 
-def save_plot_loss(loss_log, args):
+def save_plot_loss(loss_log, config):
     pl.figure(figsize=(6, 3))
     pl.title('Loss history (log10)')
     pl.plot(np.log10(loss_log), '.', alpha=0.4)
     pl.xlabel('Epoch')
     pl.ylabel(f'log10(L)')
-    pl.savefig(os.path.join(args.save_dir, 'figures', 'loss.png'))
+    pl.savefig(os.path.join(config['SAVE_DIR'], 'figures', 'loss.png'))
 
 
 def np2pil(a):
@@ -195,9 +195,10 @@ def imwrite(f, a, fmt=None):
         f = open(f, 'wb')
     np2pil(a).save(f, fmt, quality=95)
 
-def save_batch_vis(ca, x0, y0, x, step_i, args):
+def save_batch_vis(ca, x0, y0, x, step_i, config):
     vis_1 = np.hstack(x0[..., :3])
     vis0 = np.hstack(classify_and_color(ca, x0, y0).numpy())
     vis1 = np.hstack(classify_and_color(ca, x).numpy())
-    vis = np.vstack([vis_1, np.hstack(x0[..., 3:6]), vis0, vis1]) if args.agregar_girard else np.vstack([vis_1, vis0, vis1])
-    imwrite(os.path.join(args.save_dir, 'figures', 'batches_%04d.jpg'%step_i), vis)
+    vis = np.vstack([vis_1, np.hstack(x0[..., 3:6]), vis0, vis1])\
+                     if config['AGREGAR_GIRARD'] else np.vstack([vis_1, vis0, vis1])
+    imwrite(os.path.join(config['SAVE_DIR'], 'figures', 'batches_%04d.jpg'%step_i), vis)

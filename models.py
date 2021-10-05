@@ -34,7 +34,7 @@ class bloque_res_simple(tf.keras.layers.Layer):
         _xf = self.suma([_x0, _x1])
 
         return self.activ_final(_xf)
-
+"""
 MODELS = {
     'simple':   [
                 Conv2D(80, 1, padding='SAME', activation='relu'),  
@@ -47,3 +47,7 @@ MODELS = {
 def get_hidden(name):
     assert name in MODELS, 'Modelo no existente'
     return MODELS.get(name)
+"""
+CAPAS_DISP = {
+    'bloque_res_simple': bloque_res_simple
+}

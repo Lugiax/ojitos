@@ -3,6 +3,8 @@ import tensorflow as tf
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+import yaml
+import shutil
 
 from scipy.io import savemat
 from time import time
@@ -10,10 +12,11 @@ from automata import CAModel
 from utils import cargar_dataset, export_model, save_plot_loss, save_batch_vis, imwrite, color_labels
 
 parser = argparse.ArgumentParser()
-parser.add_argument('db_name', type=str,
-                    help='Nombre de la base de datos')
-parser.add_argument('model_name', type=str,
-                    help='Nombre del modelo de la RNA')
+parser.add_argument('config', type=str,
+                    help='Archivo de configuracíón .yaml')
+parser.add_argument('save_dir', type=str,
+                    help='Directorio donde se guardarán todos los archivos generados',
+                    default='resultados')
 parser.add_argument('--db_dir', type=str,
                     help='Directorio de la base de datos',
                     default='dbs')
@@ -35,9 +38,6 @@ parser.add_argument('--n_epochs', type=int,
 parser.add_argument('--n_eval_imgs', type=int,
                     help='Número de imágenes de evaluación de los conjuntos de entrenamiento y prueba',
                     default=None)
-parser.add_argument('--save_dir', type=str,
-                    help='Directorio donde se guardarán todos los archivos generados',
-                    default='resultados')
 parser.add_argument('--add_noise', action='store_true',
                     help='Bandera para agregar ruido al entrenamiento') 
 parser.add_argument('--agregar_girard', action='store_true',
@@ -54,10 +54,21 @@ if not os.path.isdir(args.save_dir):
     os.makedirs(os.path.join(args.save_dir, 'ResultadosEval/entrenamiento'))
     os.makedirs(os.path.join(args.save_dir, 'ResultadosEval/prueba'))
 
-x_train, y_train_pic, x_test, y_test_pic = cargar_dataset(nombre=args.db_name,
-                                                          carpeta=args.db_dir,
-                                                          agregar_girard=args.agregar_girard,
-                                                          selem_size=args.selem_size)
+
+#Lectura del archivo config
+with open(args.config, 'r') as f:
+    config = yaml.load(f)
+#Se crea una copia del archivo config en los resultados
+shutil.copy(args.config, args.save_dir)
+
+x_train, y_train_pic, x_test, y_test_pic = cargar_dataset(fname=config['DB_FNAME'],
+                                                          agregar_girard=config['AGREGAR_GIRARD'],
+                                                          selem_size=config['SELEM_SIZE'])
+
+config['SAVE_DIR'] = args.save_dir
+config['AUTOMATA_SHAPE'] = tuple(x_train.shape[1:3])
+
+"""
 fig, axs = plt.subplots(5, 3)
 color_labels_list = color_labels(x_train[:5], y_train_pic[:5])
 for k in range (5):
@@ -65,78 +76,21 @@ for k in range (5):
     axs[k, 1].imshow(x_train[k, ..., -1], cmap='gray')
     axs[k, 2].imshow(color_labels_list[k])
 plt.show()
+"""
 
+ca = CAModel(config)
+ca.fit(x_train, y_train_pic)
 
-ca = CAModel(model_name=args.model_name,
-             automata_shape=tuple(x_train.shape[1:3]),
-             channel_n=args.n_channels,
-             extra_chnl=args.extra_channels,
-             add_noise=args.add_noise)
-
-def individual_l2_loss(x, y):
-    t = y - ca.classify(x)
-    return tf.reduce_sum(t**2, [1, 2, 3]) / 2
-
-def batch_l2_loss(x, y):
-    return tf.reduce_mean(individual_l2_loss(x, y))
-
-loss_log = []
-lr = 1e-3
-lr_sched = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
-      [30000, 70000], [lr, lr*0.1, lr*0.01])
-trainer = tf.keras.optimizers.Adam(lr_sched)
-
-@tf.function
-def train_step(x, y):
-    with tf.GradientTape() as g:
-        for i in tf.range(args.n_iter):
-            x = ca(x, training=True)
-        loss = batch_l2_loss(x, y)
-    grads = g.gradient(loss, ca.weights)
-    grads = [g/(tf.norm(g)+1e-8) for g in grads]
-    trainer.apply_gradients(zip(grads, ca.weights))
-    return x, loss
-
-for i in range(args.n_epochs):
-    b_idx = np.random.randint(0, x_train.shape[0]-1, size=args.n_batch)
-    x0 = ca.initialize(tf.gather(x_train, b_idx))
-    y0 = tf.gather(y_train_pic, b_idx)
-
-    x, loss = train_step(x0, y0)
-
-    step_i = len(loss_log)
-    loss_log.append(loss.numpy())
-
-    if step_i%10 == 0:
-        with open(os.path.join(args.save_dir, 'loss.txt'), 'w') as f:
-            f.write(', '.join([str(i) for i in loss_log]))
-        save_plot_loss(loss, args)
-        save_batch_vis(ca, x0, y0, x, step_i, args)
-
-    if step_i%5000 == 0:
-        export_model(ca,
-                    os.path.join(args.save_dir, 'model/%07d'%step_i),
-                    args)
-
-  
-    print('\r step: %d, log10(loss): %.3f'%(len(loss_log), np.log10(loss)), end='')
-
-export_model(ca,
-             os.path.join(args.save_dir, 'model/last'),
-             args)
-
-
-
-print(f'Modelo entrenado y guardado en {os.path.join(args.save_dir, "model/last")}'
+print(f'Modelo entrenado y guardado en {os.path.join(config["SAVE_DIR"], "model/last")}'
        '\nSe procede a realizar la evaluación')
 
 #Evaluación del modelo
 n_imgs_test = x_train.shape[0] if args.n_eval_imgs is None else args.n_eval_imgs
-for save_path, x, y, tipo in [[os.path.join(args.save_dir, 'ResultadosEval/entrenamiento'),
+for save_path, x, y, tipo in [[os.path.join(config['SAVE_DIR'], 'ResultadosEval/entrenamiento'),
                          np.array(x_train)[:n_imgs_test],
                          np.array(y_train_pic)[:n_imgs_test],
                          'entrenamiento'],
-                        [os.path.join(args.save_dir, 'ResultadosEval/prueba'),
+                        [os.path.join(config['SAVE_DIR'], 'ResultadosEval/prueba'),
                          np.array(x_test)[:n_imgs_test],
                          np.array(y_test_pic)[:n_imgs_test],
                          'prueba']]:
@@ -171,4 +125,4 @@ for save_path, x, y, tipo in [[os.path.join(args.save_dir, 'ResultadosEval/entre
                 'pd_ven' : x0[j, ..., -1],
                 'pdcolor': pred_labels[j]}
                 )
-print(f'Resultados guardados en {os.path.join(args.save_dir, "ResultadosEval/")}')
+print(f'Resultados guardados en {os.path.join(config["SAVE_DIR"], "ResultadosEval/")}')
