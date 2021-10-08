@@ -56,6 +56,9 @@ class CAModel(tf.keras.Model):
     
     def guardar_pesos(self, filename):
         self.save_weights(filename)
+    
+    def cargar_pesos(self, filename):
+        self.load_weights(filename)
 
     @tf.function
     def call(self, x, fire_rate=None, manual_noise=None, training=False):
@@ -87,9 +90,9 @@ class CAModel(tf.keras.Model):
         return tf.cast(tf.concat([images, state], -1), tf.float32)
     @tf.function
     def classify(self, x):
-        # The last 10 layers are the classification predictions, one channel
-        # per class. Keep in mind there is no "background" class,
-        # and that any loss doesn't propagate to "dead" pixels.
+        """
+        Devuelve las últimas dos capas ocultas. Estas son las clasificaciones
+        """
         return x[:,:,:,-2:]
     
     @tf.function
@@ -132,4 +135,30 @@ class CAModel(tf.keras.Model):
 
         self.guardar_pesos(os.path.join(self.config['SAVE_DIR'], 'model/last'))
 
+    @tf.function
+    def predict(self, x, binary=False):
+        """
+        Devuelve las máscaras binarias de las clasificaciones.
+        """
+        x0 = self.initialize(x)
+        for _ in range(20):
+            x0 = self(x0)
+        
+        y_pred = self.classify(x0)
+        if not binary:
+            return y_pred
+        else:
+            mask = x[..., -1]
+            is_vessel = tf.cast(mask > 0.1, tf.float32)
+            y_pred = y_pred * tf.expand_dims(is_vessel, -1) #Delimita los vasos
+
+            fondo = tf.fill(list(mask.shape), 0.1)
+            y_pic = tf.concat([y_pred,tf.expand_dims(fondo, -1)], -1)
+
+            maximos = tf.argmax(y_pic, -1)
+
+            #Las arterias son 0, las venas 1
+            arterias = maximos==0
+            venas = maximos==1
+            return tf.stack([arterias, venas], -1)
 

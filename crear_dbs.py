@@ -24,7 +24,7 @@ parser.add_argument('--save_dir', type=str,
 #                    default='data.npy')
 parser.add_argument('--n_aumentados', type=int,
                     help='Cantidad de generados por imagen',
-                    default=500)
+                    default=1)
 parser.add_argument('--tipo', type=str,
                     help='Basado en: disco óptico o ventanas. Seleccionar de entre: [disco, ventanas]',
                     default='disco')
@@ -69,10 +69,6 @@ desplazamiento = args.desp_max
 automata_shape = eval(args.automata_shape)
 assert len(automata_shape)==2
 
-##Se le da forma al nombre
-nombre = f'datos_{tipo}_{N_aumentos_x_img}aug_{ventana}ven_{automata_shape[0]}aut_{max_angle}deg_{desplazamiento}des.npy'
-save_fn = os.path.join(save_path, nombre)
-
 ## ------------------ FUNCS
 def adjust(img):
     im = 0.8*img[...,1]+0.2*img[...,2]
@@ -110,10 +106,14 @@ def abrir_img(path, shape=None):
 x = []
 y = []
 padding = ventana if padding is None else padding
-sub_pad = ventana//2+padding
+sub_pad = ventana//3+padding
 
 lista_rgb = []
 lista_labels = []
+db_source_name = None
+
+##Para el procesamiento de datos se almacenan los nombres de los archivos
+##de las imágenes RGB y de las etiquetas.
 
 ## Procesamiento para la base de datos del IIMAS
 if 'iimas' in source.lower():
@@ -130,6 +130,7 @@ if 'iimas' in source.lower():
             else: ## La imagen RGB
                 lista_rgb.append(i)
         lista_labels.append(labels)
+    db_source_name = 'iimas'
         
         
 ##Procesamiento de datos de HRF-AV
@@ -137,6 +138,16 @@ if 'iimas' in source.lower():
 elif 'hrf' in source.lower():
     lista_rgb = sorted(glob(source + '/Images/*'))
     lista_labels = sorted(glob(source + '/AVReference/*'))
+    db_source_name = 'hrf'
+
+elif 'rite' in source.lower():
+    lista_rgb = sorted(glob(source + '/images/*'))
+    lista_labels = sorted(glob(source + '/av/*'))
+    db_source_name = 'rite'
+    if ventana>300:
+        print('El tamaño de las imágenes de RITE-DRIAVE es de 500x500px. '
+              'Considera otro tamaño de ventana')
+
 else:
     raise ValueError('Carpeta incorrecta')
 
@@ -151,12 +162,14 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
             abrir_img(labels_path[0])*1.,
             abrir_img(labels_path[1])*1.
         ]
-    elif 'hrf' in source.lower():
+    elif 'hrf' in source.lower() or 'rite' in source.lower():
         label_img = abrir_img(labels_path)/255.
         print(f'Label inter {np.min(label_img)} - {np.max(label_img)}')
         labels = [
-                np.clip(label_img[..., 0] + label_img[..., 1], 0, 1), #R + G
-                np.clip(label_img[..., 2] + label_img[..., 1], 0, 1) #B + G
+                label_img[..., 0],
+                label_img[..., 2]
+                #np.clip(label_img[..., 0] + label_img[..., 1], 0, 1), #R + G
+                #np.clip(label_img[..., 2] + label_img[..., 1], 0, 1) #B + G
                 ]
 
     ##Image padding
@@ -183,24 +196,28 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
     counter = 0
     selected = 0
     while counter <N_aumentos_x_img and selected < len(coords) :
-        if counter% int(N_aumentos_x_img*0.1)==0:
+        if N_aumentos_x_img>=10 and counter % int(N_aumentos_x_img*0.1)==0:
             print(f'\r\t- Generando datos... Encontrados: {counter}', end='')
-        #try:
+
         cy, cx = coords[selected]
         selected += 1
+
+        #pdb.set_trace()
         
         angle = float(np.random.randint(-max_angle, max_angle))
-        rot_labels = [rotate(l2, angle) for l2 in #
-                        [l1[cy-sub_pad:cy+sub_pad,cx-sub_pad:cx+sub_pad] for l1 in labels]
+        y_min = max(0, cy-sub_pad)
+        x_min = max(0, cx-sub_pad)
+        rot_labels = [rotate(l2, angle) for l2 in
+                        [l1[y_min:cy+sub_pad, x_min:cx+sub_pad] for l1 in labels]
                         ]
-                         
+                                 
         new_labels = [resize(l[padding:-padding, padding:-padding],
                                     automata_shape,
                                     anti_aliasing=True)\
                         for l in rot_labels]
         
         mascara_completa = new_labels[0] + new_labels[1] > 0.1
-        rot_img = rotate(rgb_img[cy-sub_pad:cy+sub_pad,cx-sub_pad:cx+sub_pad], angle)
+        rot_img = rotate(rgb_img[y_min:cy+sub_pad,x_min:cx+sub_pad], angle)
         new_img = resize(rot_img[padding:-padding, padding:-padding],
                             automata_shape,
                             anti_aliasing=True)
@@ -232,6 +249,11 @@ print('Dimensiones: xtrain: {}, ytrain: {}, xtest: {}, ytest: {}'.format(x_train
                                                                         y_train_pic.shape, 
                                                                         x_test.shape, 
                                                                         y_test_pic.shape))
+
+
+##Se le da forma al nombre del archivo
+nombre = f'{db_source_name}_{tipo}_{N_aumentos_x_img}aug_{ventana}ven_{automata_shape[0]}aut_{max_angle}deg_{desplazamiento}des.npy'
+save_fn = os.path.join(save_path, nombre)
 
 with open(save_fn, 'wb') as f:
     np.save(f, x_train)
