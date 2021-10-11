@@ -8,30 +8,64 @@ from google.protobuf.json_format import MessageToDict
 from tensorflow.python.framework import convert_to_constants
 
 from skimage.morphology import disk, binary_dilation, square
+from skimage.filters import gaussian, threshold_multiotsu
 from skimage.filters.rank import median
-from skimage.measure import regionprops
-from skimage.transform import resize
+from skimage.measure import regionprops, label
+from skimage.transform import resize, rescale
 
-def adjust(img):
-    im = 0.8*img[...,1]+0.2*img[...,2]
-    def gauss(v, u, sigma = 200):
-        return np.exp(-(v-u)**2/(2*sigma**2))
-    x = np.arange(im.shape[1])
-    y = np.arange(im.shape[0])
-    X, Y = np.meshgrid(x,y)
-    Z = gauss(X, im.shape[1]//2) + gauss(Y, im.shape[0]//2)
-    adjusted = im*Z
-    return adjusted / np.max(adjusted)
+def segment(img, sigma, umbral=None):
 
-def get_optical_disk_center(im, t=0.92, scale=0.3): 
-    if scale!=1:
+    #plt.imshow(img)
+    #plt.title('Original')
+    #plt.show()
+    _x, _y = np.meshgrid(np.linspace(-1,1, img.shape[1]), np.linspace(-1,1, img.shape[0]))
+    dst = np.sqrt(_x*_x + _y*_y)
+    gauss_curve = np.exp( -( dst**2 / ( 2 * 1.4**2) ))
+    #plt.imshow(gauss_curve)
+    #plt.show()
+
+    chns = []
+    for k in range(3):
+        chn_img = img[..., k]*gauss_curve
+        norm_img = ( chn_img - np.min(chn_img)) / (np.max(chn_img)-np.min(chn_img) )
+        norm_img = gaussian(norm_img, sigma)
+        umbral_chn = threshold_multiotsu(norm_img[norm_img>0.55], 5)[-1] if umbral is None else umbral
+        bin_img = norm_img >= umbral_chn
+        chns.append(bin_img)
+
+    segmented = np.logical_or(chns[1], chns[2]) # Antes era: np.logical_and(chns[0], np.logical_or(chns[1], chns[2]))
+                                                # El canal rojo solo mete ruido
+    return segmented
+
+def get_optical_disk_center(im, scale=None, sigma=13, ra=75): 
+    if scale is None: #Se escala la Imagen
+        scale = 1000/min(im.shape[:2])
+
+    if scale<1:
         shape_scaled = [int(s*scale) for s in im.shape[:2]]
         im = resize(im, shape_scaled, anti_aliasing=True)
-    im = adjust(im)
-    im_bin = im > t
-    im_bin = binary_dilation(im_bin, disk(10))
-    regions = regionprops(im_bin*1)
-    return [int(v/scale) for v in regions[0].centroid]# cy, cx
+    else:
+        im = rescale(im, scale, order=2, multichannel=True)
+
+    im_seg = segment(im, sigma=sigma)
+    separadas = label(im_seg, connectivity=2)
+    regions = regionprops(separadas)
+    candidatas = []
+    todas = []
+    for r in regions:
+        redondez = 4*np.pi*r.area/(r.perimeter**2)
+        if redondez >= 0.5:
+            razon = np.abs(np.sqrt(r.area/np.pi) - ra) ##Falta revisar bien cómo usar la Ra
+            candidatas.append((r.centroid, razon))
+        todas.append((r.centroid, redondez))
+    
+    reverse = False
+    if len(candidatas) == 0:
+        candidatas = todas
+        reverse = True
+ 
+    mejor = sorted(candidatas, key = lambda x: x[1], reverse=reverse)[0]#Ordenar según la razón o redondez
+    return [int(v/scale) for v in mejor[0]]# cy, cx
 
 def normalize_girard(batch, sigma=2, selem_size=5):
     def join(r,g,b):

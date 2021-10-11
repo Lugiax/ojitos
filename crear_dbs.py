@@ -5,6 +5,7 @@ import re
 import numpy as np
 import matplotlib.pyplot as plt
 import pdb
+import time
 
 from glob import glob
 from skimage.transform import resize, rotate
@@ -226,7 +227,9 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
             fig, axs = plt.subplots(1,2)
             axs[0].imshow(new_img)
             axs[1].imshow(mascara_completa)
+            plt.draw()
             plt.plot()
+            time.sleep(5)
 
         x.append(np.concatenate( [new_img, mascara_completa[..., np.newaxis]], axis=2))
         y.append(np.stack(new_labels, axis=2))
