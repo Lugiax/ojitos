@@ -121,7 +121,7 @@ class CAModel(tf.keras.Model):
             step_i = len(loss_log)
             loss_log.append(loss.numpy())
 
-            if step_i%10 == 0:
+            if step_i%100 == 0:
                 with open(os.path.join(self.config['SAVE_DIR'], 'loss.txt'), 'w') as f:
                     f.write(', '.join([str(i) for i in loss_log]))
                 save_plot_loss(loss, self.config)

@@ -4,6 +4,8 @@ import json
 import tensorflow as tf
 import matplotlib.pylab as pl
 import PIL.Image
+import yaml
+import re
 from google.protobuf.json_format import MessageToDict
 from tensorflow.python.framework import convert_to_constants
 
@@ -125,6 +127,16 @@ def cargar_dataset(fname, agregar_girard=False, selem_size=5):
     return x_train, y_train_pic, x_test, y_test_pic
 
 
+def cargar_config(fname, automata_shape=None, save_dir='.'):
+    with open(fname, 'r') as f:
+        config = yaml.load(f)
+    
+    config['AUTOMATA_SHAPE'] = [int(re.findall(r'(\d+)aut', config['DB_FNAME'])[0])]*2\
+                                    if automata_shape is None else automata_shape
+    config['SAVE_DIR'] = save_dir
+    return config
+
+
 
 def export_model(ca, base_fn, args):
     ca.save_weights(base_fn)
@@ -236,3 +248,4 @@ def save_batch_vis(ca, x0, y0, x, step_i, config):
     vis = np.vstack([vis_1, np.hstack(x0[..., 3:6]), vis0, vis1])\
                      if config['AGREGAR_GIRARD'] else np.vstack([vis_1, vis0, vis1])
     imwrite(os.path.join(config['SAVE_DIR'], 'figures', 'batches_%04d.jpg'%step_i), vis)
+
