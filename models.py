@@ -38,7 +38,7 @@ class bloque_res_simple(tf.keras.layers.Layer):
 
 class conv(tf.keras.layers.Layer):
     def __init__(self, size=None):
-        super(bloque_res_simple, self).__init__()
+        super(conv, self).__init__()
         self.conv = Conv2D(size, 1, padding="SAME", activation='relu')
 
     def call(self, x):
