@@ -249,3 +249,33 @@ def save_batch_vis(ca, x0, y0, x, step_i, config):
                      if config['AGREGAR_GIRARD'] else np.vstack([vis_1, vis0, vis1])
     imwrite(os.path.join(config['SAVE_DIR'], 'figures', 'batches_%04d.jpg'%step_i), vis)
 
+def calcular_metricas(y_true, y_pred):
+
+    conf_mat = tf.math.confusion_matrix(tf.reshape(y_true, [-1]),
+                                        tf.reshape(y_pred, [-1]))
+    TP, FP, FN, TN = conf_mat.numpy().ravel()
+    
+    metricas = {
+        'acc':     (TP + TN) / (TP + TN + FP + FN),
+        'prec':    TP / (TP + FP),
+        'recall':  TP / (TP + FN),
+        'sensit':  TN / (FP + TN),
+        'dice':    2*TP / (2*TP + FP + FN),
+        'jaccard': TP / (TP + FP + FN)
+    }
+
+    return(metricas)
+
+
+if __name__ == '__main__':
+    y_pred = np.array([[0,1,0,1],
+                       [0,1,0,1],
+                       [0,1,1,1],
+                       [0,1,0,1]])
+
+    y_true = np.array([[0,1,0,1],
+                       [0,1,0,1],
+                       [0,1,0,1],
+                       [0,1,0,1]])
+    
+    print(calcular_metricas(y_true, y_pred))

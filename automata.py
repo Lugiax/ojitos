@@ -152,13 +152,15 @@ class CAModel(tf.keras.Model):
             is_vessel = tf.cast(mask > 0.1, tf.float32)
             y_pred = y_pred * tf.expand_dims(is_vessel, -1) #Delimita los vasos
 
-            fondo = tf.fill(list(mask.shape), 0.1)
-            y_pic = tf.concat([y_pred,tf.expand_dims(fondo, -1)], -1)
+            #fondo = tf.fill(list(mask.shape), 0.1)
+            #y_pic = tf.concat([y_pred,tf.expand_dims(fondo, -1)], -1)
 
-            maximos = tf.argmax(y_pic, -1)
+            #maximos = tf.argmax(y_pic, -1)
 
             #Las arterias son 0, las venas 1
-            arterias = maximos==0
-            venas = maximos==1
-            return tf.stack([arterias, venas], -1)
+            #arterias = maximos==0
+            #venas = maximos==1
+            #return tf.stack([arterias, venas], -1)
+
+            return y_pred > 0
 
