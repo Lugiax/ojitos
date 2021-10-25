@@ -250,32 +250,53 @@ def save_batch_vis(ca, x0, y0, x, step_i, config):
     imwrite(os.path.join(config['SAVE_DIR'], 'figures', 'batches_%04d.jpg'%step_i), vis)
 
 def calcular_metricas(y_true, y_pred):
-
-    conf_mat = tf.math.confusion_matrix(tf.reshape(y_true, [-1]),
-                                        tf.reshape(y_pred, [-1]))
-    TP, FP, FN, TN = conf_mat.numpy().ravel()
+    if tf.is_tensor(y_true):
+        t, p = y_true.numpy(), y_pred.numpy()
+    else:
+        t, p = y_true[::], y_pred[::]
     
-    metricas = {
-        'acc':     (TP + TN) / (TP + TN + FP + FN),
-        'prec':    TP / (TP + FP),
-        'recall':  TP / (TP + FN),
-        'sensit':  TN / (FP + TN),
-        'dice':    2*TP / (2*TP + FP + FN),
-        'jaccard': TP / (TP + FP + FN)
-    }
+    print(t.shape, p.shape)
+    assert t.shape == p.shape and len(t.shape) in [3,4], 'Revisar las dimensiones de los tensores'
 
+    if len(t.shape)==3:
+        #Agregar una dimensión a los arreglos tridimensionales
+        t = t[None, ...]
+        p = p[None, ...]
+    
+    ta, tv = t[..., 0], t[..., 1]
+    pa, pv = p[..., 0], p[..., 1]
+    n = t.shape[0]
+
+    conf_mats = [[tf.math.confusion_matrix(ta[i].ravel(),
+                                          pa[i].ravel()),
+                  tf.math.confusion_matrix(tv[i].ravel(),
+                                          pv[i].ravel())]
+                    for i in range(n)]
+
+    metricas = {
+            'acc':     [[],[]],
+            'prec':    [[],[]],
+            'recall':  [[],[]],
+            'sensit':  [[],[]],
+            'dice':    [[],[]],
+            'jaccard': [[],[]]
+        }
+    
+    for conf_mat in conf_mats:
+        for k in range(2):
+            TP, FP, FN, TN = conf_mat[k].numpy().ravel()
+            metricas['acc'][k].append( (TP + TN) / (TP + TN + FP + FN) )
+            metricas['prec'][k].append( TP / (TP + FP))
+            metricas['recall'][k].append( TP / (TP + FN))
+            metricas['sensit'][k].append( TN / (FP + TN))
+            metricas['dice'][k].append( 2*TP / (2*TP + FP + FN))
+            metricas['jaccard'][k].append( TP / (TP + FP + FN))
+            
     return(metricas)
 
 
 if __name__ == '__main__':
-    y_pred = np.array([[0,1,0,1],
-                       [0,1,0,1],
-                       [0,1,1,1],
-                       [0,1,0,1]])
-
-    y_true = np.array([[0,1,0,1],
-                       [0,1,0,1],
-                       [0,1,0,1],
-                       [0,1,0,1]])
+    y_pred = np.random.randint(0,2, size = (10,1000,1000,2))
+    y_true = np.random.randint(0,2, size = (10,1000,1000,2))
     
     print(calcular_metricas(y_true, y_pred))
