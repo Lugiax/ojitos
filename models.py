@@ -34,6 +34,16 @@ class bloque_res_simple(tf.keras.layers.Layer):
         _xf = self.suma([_x0, _x1])
 
         return self.activ_final(_xf)
+
+
+class conv(tf.keras.layers.Layer):
+    def __init__(self, size=None):
+        super(bloque_res_simple, self).__init__()
+        self.conv = Conv2D(size, 1, padding="SAME", activation='relu')
+
+    def call(self, x):
+        return self.conv(x)
+
 """
 MODELS = {
     'simple':   [
@@ -49,5 +59,6 @@ def get_hidden(name):
     return MODELS.get(name)
 """
 CAPAS_DISP = {
-    'bloque_res_simple': bloque_res_simple
+    'bloque_res_simple': bloque_res_simple,
+    'simple': conv
 }
