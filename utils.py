@@ -255,7 +255,6 @@ def calcular_metricas(y_true, y_pred):
     else:
         t, p = y_true[::], y_pred[::]
     
-    print(t.shape, p.shape)
     assert t.shape == p.shape and len(t.shape) in [3,4], 'Revisar las dimensiones de los tensores'
 
     if len(t.shape)==3:
@@ -276,8 +275,8 @@ def calcular_metricas(y_true, y_pred):
     metricas = {
             'acc':     [[],[]],
             'prec':    [[],[]],
-            'recall':  [[],[]],
             'sensit':  [[],[]],
+            'specif':  [[],[]],
             'dice':    [[],[]],
             'jaccard': [[],[]]
         }
@@ -287,8 +286,8 @@ def calcular_metricas(y_true, y_pred):
             TP, FP, FN, TN = conf_mat[k].numpy().ravel()
             metricas['acc'][k].append( (TP + TN) / (TP + TN + FP + FN) )
             metricas['prec'][k].append( TP / (TP + FP))
-            metricas['recall'][k].append( TP / (TP + FN))
-            metricas['sensit'][k].append( TN / (FP + TN))
+            metricas['sensit'][k].append( TP / (TP + FN))
+            metricas['specif'][k].append( TN / (FP + TN))
             metricas['dice'][k].append( 2*TP / (2*TP + FP + FN))
             metricas['jaccard'][k].append( TP / (TP + FP + FN))
             

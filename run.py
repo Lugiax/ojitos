@@ -9,7 +9,8 @@ import shutil
 from scipy.io import savemat
 from time import time
 from automata import CAModel 
-from utils import cargar_dataset, export_model, save_plot_loss, save_batch_vis, imwrite, color_labels
+from utils import cargar_dataset, export_model, save_plot_loss,\
+                  save_batch_vis, imwrite, color_labels, calcular_metricas
 
 parser = argparse.ArgumentParser()
 parser.add_argument('config', type=str,
@@ -84,16 +85,48 @@ ca.fit(x_train, y_train_pic)
 print(f'Modelo entrenado y guardado en {os.path.join(config["SAVE_DIR"], "model/last")}'
        '\nSe procede a realizar la evaluación')
 
+## Generación de las métricas
+
+#Métricas del conjunto de prueba:
+#(Se hace un recorrido para no saturar la memoria)
+metricas = None
+for k in range(x_train.shape[0]):
+    y_pred = ca.predict(x_train[k], binary=True)
+    if metricas is None:
+        metricas = calcular_metricas(y_)
+
+
 #Evaluación del modelo
 n_imgs_test = x_train.shape[0] if args.n_eval_imgs is None else args.n_eval_imgs
-for save_path, x, y, tipo in [[os.path.join(config['SAVE_DIR'], 'ResultadosEval/entrenamiento'),
-                         np.array(x_train)[:n_imgs_test],
-                         np.array(y_train_pic)[:n_imgs_test],
+for save_path, x, y, tipo in [[os.path.join(config['SAVE_DIR'], 'ResultadosEval/'),
+                         x_train[:n_imgs_test],
+                         y_train_pic[:n_imgs_test],
                          'entrenamiento'],
-                        [os.path.join(config['SAVE_DIR'], 'ResultadosEval/prueba'),
-                         np.array(x_test)[:n_imgs_test],
-                         np.array(y_test_pic)[:n_imgs_test],
+                        [os.path.join(config['SAVE_DIR'], 'ResultadosEval/'),
+                         x_test[:n_imgs_test],
+                         y_test_pic[:n_imgs_test],
                          'prueba']]:
+    metricas = [dict(),dict()]
+    intervalos = 10
+    for i in range(0, x.shape[0], intervalos):
+        sub_x, sub_y = x[i : i+intervalos], y[i : i+intervalos]
+        y_pred = ca.predict(sub_x)
+        _metricas = calcular_metricas(sub_y, y_pred)
+        for tipo_av in [0,1]:
+            for res in _metricas:
+                metricas[tipo_av][res] = metricas[tipo_av].get(res, []) + _metricas[res][tipo_av]
+
+    for k, tipo_av in enumerate(['arterias', 'venas']):
+        with open(os.path.join(save_path,f'{tipo}_{tipo_av}.yaml'), 'w') as f:
+            f.write('metrica,promedio,min,max,std\n')
+            for m in metricas[k]:
+                data = metricas[k][m]
+                f.write(','.join([m,str(np.mean(data)),
+                                    str(min(data)),
+                                    str(max(data)),
+                                    str(np.std(data))]) + '\n')
+          
+    """
     print(f'\tEvaluando conjunto de {tipo}')
     t1 = time()
     x0 = ca.initialize(x)
@@ -125,4 +158,6 @@ for save_path, x, y, tipo in [[os.path.join(config['SAVE_DIR'], 'ResultadosEval/
                 'pd_ven' : x0[j, ..., -1],
                 'pdcolor': pred_labels[j]}
                 )
-print(f'Resultados guardados en {os.path.join(config["SAVE_DIR"], "ResultadosEval/")}')
+    """
+
+print(f'Resultados de la evaluación guardados en {os.path.join(config["SAVE_DIR"], "ResultadosEval/")}')
