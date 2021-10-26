@@ -87,15 +87,6 @@ print(f'Modelo entrenado y guardado en {os.path.join(config["SAVE_DIR"], "model/
 
 ## Generación de las métricas
 
-#Métricas del conjunto de prueba:
-#(Se hace un recorrido para no saturar la memoria)
-metricas = None
-for k in range(x_train.shape[0]):
-    y_pred = ca.predict(x_train[k], binary=True)
-    if metricas is None:
-        metricas = calcular_metricas(y_)
-
-
 #Evaluación del modelo
 n_imgs_test = x_train.shape[0] if args.n_eval_imgs is None else args.n_eval_imgs
 for save_path, x, y, tipo in [[os.path.join(config['SAVE_DIR'], 'ResultadosEval/'),
@@ -109,15 +100,15 @@ for save_path, x, y, tipo in [[os.path.join(config['SAVE_DIR'], 'ResultadosEval/
     metricas = [dict(),dict()]
     intervalos = 10
     for i in range(0, x.shape[0], intervalos):
-        sub_x, sub_y = x[i : i+intervalos], y[i : i+intervalos]
-        y_pred = ca.predict(sub_x)
+        sub_x, sub_y = x[i : i+intervalos], y[i : i+intervalos]>0.1
+        y_pred = ca.predict(sub_x, binary=True)
         _metricas = calcular_metricas(sub_y, y_pred)
         for tipo_av in [0,1]:
             for res in _metricas:
                 metricas[tipo_av][res] = metricas[tipo_av].get(res, []) + _metricas[res][tipo_av]
 
     for k, tipo_av in enumerate(['arterias', 'venas']):
-        with open(os.path.join(save_path,f'{tipo}_{tipo_av}.yaml'), 'w') as f:
+        with open(os.path.join(save_path,f'{tipo}_{tipo_av}.csv'), 'w') as f:
             f.write('metrica,promedio,min,max,std\n')
             for m in metricas[k]:
                 data = metricas[k][m]
