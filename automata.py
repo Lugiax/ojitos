@@ -31,7 +31,11 @@ class CAModel(tf.keras.Model):
         super().__init__()
         self.automata_shape = config['AUTOMATA_SHAPE']
         self.channel_n = config['CHANNEL_N']
-        self.extra_chnl = 3 if config['AGREGAR_GIRARD'] else 0
+        self.extra_chnl = 0
+        if config['AGREGAR_GIRARD']:
+            self.extra_chnl += 3
+        elif config['SIN_MASCARA']:
+            self.extra_chnl -= 1
         self.fire_rate = config['CELL_FIRE_RATE']
         self.add_noise = config['ADD_NOISE']
         self.capas_config = config['CAPAS']
@@ -164,3 +168,35 @@ class CAModel(tf.keras.Model):
 
             return y_pred > 0
 
+
+class Automata2(CAModel):
+
+    @tf.function
+    def call(self, x, fire_rate=None, manual_noise=None, training=False):
+        self.training = training
+        #self.extra_chnl debe ser -1 (sin máscara) o 2 (girard)
+        img_norm, state = tf.split(x, [4+self.extra_chnl, self.channel_n], -1)
+        ds = self.dmodel(self.perceive(x))
+        if self.add_noise:
+            if manual_noise is None:
+                residual_noise = tf.random.normal(tf.shape(ds), 0., 0.02)
+            else:
+                residual_noise = manual_noise
+            ds += residual_noise
+
+        if fire_rate is None:
+            fire_rate = self.fire_rate
+        update_mask = tf.random.uniform(tf.shape(x[..., :1])) <= fire_rate
+        living_mask = tf.expand_dims(tf.math.reduce_max(state[..., -2:], axis=-1), -1)
+        dilated_mask = tf.nn.dilation2d(living_mask,
+                                        filters = tf.ones((3, 3, living_mask.shape[-1])),
+                                        strides=[1,1,1,1],
+                                        padding='SAME',
+                                        data_format='NHWC',
+                                        dilations=[1,1,1,1])
+        residual_mask = update_mask & (dilated_mask > 0)
+        ds *= tf.cast(residual_mask, tf.float32)
+        state += ds
+        concatenada = tf.concat([img_norm, state], -1)
+        return concatenada
+    

@@ -13,6 +13,8 @@ from skimage.morphology import skeletonize, disk, binary_dilation
 from skimage.measure import regionprops
 from skimage.io import imread
 
+from utils import abrir_img
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('data_dir', type=str,
@@ -42,10 +44,12 @@ parser.add_argument('--padding', type=int,
                     help='Padding para las zonas negras en la rotación',
                     default=None)
 parser.add_argument('--automata_shape', type=str,
-                    help='Dimensiones del autómata en la forma (H,W)',
+                    help='Dimensiones del autómata en la forma de cadena (H,W)',
                     default='(50,50)')
 parser.add_argument('--mostrar', action='store_true',
-                    help='Bandera para mostrar los datos generados')                    
+                    help='Bandera para mostrar los datos generados')
+parser.add_argument('--sin_mascara', action='store_true',
+                    help='Genera la BD sin el canal de la máscara binaria')                    
 
 args = parser.parse_args()
 
@@ -92,15 +96,11 @@ def get_optical_disk_center(im, t=0.92, scale=0.3):
     regions = regionprops(im_bin*1)
     return [int(v/scale) for v in regions[0].centroid]# cy, cx
 
-
-def abrir_img(path, shape=None):
-    if path.split('.')[-1] in ['tif', 'tiff']:
-        img = np.array(PIL.Image.open(path))
-    else:
-        img = imread(path)
-    if shape is not None:
-        img = resize(img, shape)
-    return img
+def leer_centro(path):
+    with open(path, 'r') as f:
+        lineas = f.readlines()
+        coord = [int(c.strip()) for c in lineas[1].split(',')]
+        return coord[::-1]
 
 
 # -------------------------LOOP
@@ -111,6 +111,7 @@ sub_pad = ventana//3+padding
 
 lista_rgb = []
 lista_labels = []
+lista_centros = []
 db_source_name = None
 
 ##Para el procesamiento de datos se almacenan los nombres de los archivos
@@ -128,6 +129,8 @@ if 'iimas' in source.lower():
                 labels.insert(0, i)
             elif 'vein' in i: #Máscara de venas
                 labels.append(i)
+            elif 'DO' in i:
+                lista_centros.append(i)
             else: ## La imagen RGB
                 lista_rgb.append(i)
         lista_labels.append(labels)
@@ -152,12 +155,13 @@ elif 'rite' in source.lower():
 else:
     raise ValueError('Carpeta incorrecta')
 
-
 #Proceso de carga de imágenes y generación del dataset
-for rgb_path, labels_path in zip(lista_rgb, lista_labels):
+for rgb_path, labels_path, centro_path in zip(lista_rgb, lista_labels, lista_centros):
     print(f'Trabajando con la imagen {os.path.basename(rgb_path).split(".")[0]}') 
     ##Image lecture
+
     rgb_img = abrir_img(rgb_path)/255.
+
     if 'iimas' in source.lower():
         labels = [
             abrir_img(labels_path[0])*1.,
@@ -165,7 +169,7 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
         ]
     elif 'hrf' in source.lower() or 'rite' in source.lower():
         label_img = abrir_img(labels_path)/255.
-        print(f'Label inter {np.min(label_img)} - {np.max(label_img)}')
+        #print(f'Label inter {np.min(label_img)} - {np.max(label_img)}')
         labels = [
                 label_img[..., 0],
                 label_img[..., 2]
@@ -179,8 +183,9 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
     
     if tipo=='disco':
         print('\tTrabajando con el disco óptico... ', end='')
-        cy, cx = get_optical_disk_center(rgb_img, scale=0.3)
-        print(f'encontrado en {cy} y - {cx} x')
+        #cy, cx = get_optical_disk_center(rgb_img, scale=0.3)
+        cy, cx = leer_centro(centro_path)
+        print(f'leído en {cy} y - {cx} x')
         desps = np.random.randint(-desplazamiento, desplazamiento, size=(N_aumentos_x_img, 2))
         coords = [(cy+dy, cx+dx) for dy,dx in desps]
     else:
@@ -202,26 +207,26 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
 
         cy, cx = coords[selected]
         selected += 1
-
-        #pdb.set_trace()
         
         angle = float(np.random.randint(-max_angle, max_angle))
         y_min = max(0, cy-sub_pad)
         x_min = max(0, cx-sub_pad)
+
+        rot_img = rotate(rgb_img[y_min:cy+sub_pad,x_min:cx+sub_pad], angle)
+        new_img = resize(rot_img[padding:-padding, padding:-padding],
+                            automata_shape,
+                            anti_aliasing=True)
+
         rot_labels = [rotate(l2, angle) for l2 in
                         [l1[y_min:cy+sub_pad, x_min:cx+sub_pad] for l1 in labels]
                         ]
-                                 
+                                
         new_labels = [resize(l[padding:-padding, padding:-padding],
                                     automata_shape,
                                     anti_aliasing=True)\
                         for l in rot_labels]
         
         mascara_completa = new_labels[0] + new_labels[1] > 0.1
-        rot_img = rotate(rgb_img[y_min:cy+sub_pad,x_min:cx+sub_pad], angle)
-        new_img = resize(rot_img[padding:-padding, padding:-padding],
-                            automata_shape,
-                            anti_aliasing=True)
 
         if args.mostrar:
             fig, axs = plt.subplots(1,2)
@@ -231,10 +236,14 @@ for rgb_path, labels_path in zip(lista_rgb, lista_labels):
             plt.plot()
             time.sleep(5)
 
-        x.append(np.concatenate( [new_img, mascara_completa[..., np.newaxis]], axis=2))
+        if args.sin_mascara:
+            x.append(new_img)
+        else:
+            x.append(np.concatenate( [new_img, mascara_completa[..., np.newaxis]], axis=2))
         y.append(np.stack(new_labels, axis=2))
 
         counter+=1
+        print(new_img.shape)
     print(f'\r\t- Generando datos... {counter} datos generados... Continuando...')
 
 print(f'Terminado :D ... generados {len(x)} datos')        
@@ -255,7 +264,9 @@ print('Dimensiones: xtrain: {}, ytrain: {}, xtest: {}, ytest: {}'.format(x_train
 
 
 ##Se le da forma al nombre del archivo
-nombre = f'{db_source_name}_{tipo}_{N_aumentos_x_img}aug_{ventana}ven_{automata_shape[0]}aut_{max_angle}deg_{desplazamiento}des.npy'
+nombre = f'{db_source_name}_{tipo}_{N_aumentos_x_img}aug_{ventana}ven_'\
+         f'{automata_shape[0]}aut_{max_angle}deg_{desplazamiento}des_'\
+         f'{"no-" if args.sin_mascara else ""}mask.npy'
 save_fn = os.path.join(save_path, nombre)
 
 with open(save_fn, 'wb') as f:

@@ -14,6 +14,7 @@ from skimage.filters import gaussian, threshold_multiotsu
 from skimage.filters.rank import median
 from skimage.measure import regionprops, label
 from skimage.transform import resize, rescale
+from skimage.io import imread
 
 def segment(img, sigma, umbral=None):
 
@@ -96,7 +97,8 @@ def cargar_dataset(fname, agregar_girard=False, selem_size=5):
         y_train_pic =np.load(f)
         x_test = np.load(f)
         y_test_pic = np.load(f)
-    
+
+    original_channels=x_train.shape[-1]
     new_idx_train = np.random.randint(0, x_train.shape[0]-1, size=x_train.shape[0])
     new_idx_test = np.random.randint(0, x_test.shape[0]-1, size=x_test.shape[0])
 
@@ -124,7 +126,8 @@ def cargar_dataset(fname, agregar_girard=False, selem_size=5):
     y_train_pic = tf.cast(y_train_pic[new_idx_train], tf.float32)
     y_test_pic = tf.cast(y_test_pic[new_idx_test], tf.float32)
 
-    return x_train, y_train_pic, x_test, y_test_pic
+    #No encontré otra forma mejor para quitar la "máscara de las imágenes que no la tienen"
+    return x_train[..., :original_channels], y_train_pic, x_test[..., :original_channels], y_test_pic
 
 
 def cargar_config(fname, automata_shape=None, save_dir='.'):
@@ -185,7 +188,10 @@ color_lookup = tf.constant([
 backgroundWhite = True
 def color_labels(x, y_pic, disable_black=False, dtype=tf.uint8):
     # works for shapes of x [b, r, c] and [r, c]
-    mask = x[..., -1]
+    if x.shape[-1]==4:
+        mask = x[..., -1]
+    elif x.shape[-1]==3:
+        mask = tf.math.reduce_max(y_pic, axis=-1)
     black_and_white = tf.fill(list(mask.shape) + [2], 0.01)
     is_gray = tf.cast(mask > 0.1, tf.float32)
     is_not_gray = 1. - is_gray
@@ -231,6 +237,15 @@ def np2pil(a):
     if a.dtype in [np.float32, np.float64]:
         a = np.uint8(np.clip(a, 0, 1)*255)
     return PIL.Image.fromarray(a)
+
+def abrir_img(path, shape=None):
+    if path.split('.')[-1] in ['tif', 'tiff']:
+        img = np.array(PIL.Image.open(path))
+    else:
+        img = imread(path)
+    if shape is not None:
+        img = resize(img, shape)
+    return img
 
 def imwrite(f, a, fmt=None):
     a = np.asarray(a)
