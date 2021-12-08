@@ -1,0 +1,22 @@
+
+---
+#Parámetros autómata
+CHANNEL_N: 10
+CELL_FIRE_RATE: 0.5
+N_ITER: 40
+AUTOMATA_SHAPE: [100,100]
+
+#Parámetros datos
+AGREGAR_GIRARD: False
+SELEM_SIZE: 5
+ADD_NOISE: True
+SIN_MASCARA: True
+
+#Parámetros entrenamiento
+DB_FNAME: /content/drive/MyDrive/proyecto_ojos/dbs/Todos de 1 aug
+BATCH_SIZE: 8
+EPOCHS: 10000
+
+#Arquitectura red
+CAPAS:
+  - [bloque_res_simple, 50]
